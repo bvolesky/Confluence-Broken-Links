@@ -6,9 +6,10 @@ import html
 import math
 
 # -----> USER INPUT VARIABLES
-main_url = input("Enter the Confluence website you would like to scan (Ex. wiki.cerner.com): ").strip()
+main_url = input("Enter the Confluence website you would like to scan (Ex. wiki.contoso.com): ").strip()
 space = input("Enter the Confluence space key you would like to scan (Ex: HSDS, DataWorks): ").strip()
 confluence_token = input("Go to https://{}/plugins/personalaccesstokens/usertokens.action > Create token\nPaste your Personal Access Token here: ".format(main_url)).strip()
+
 # -----> DECLARE VARIABLES
 confluence_headers = {"Accept": "application/json", "Authorization": "Bearer {}".format(confluence_token)}
 pages_dict = {}
@@ -23,11 +24,10 @@ breaker = "-------------------------------------------------------"
 lookup_url_count = 0
 extract_pages_count = 0
 
-
 # -----> Grab lookup info
 def authenticate():
     global response
-    _url = 'https://{}/pages/listpages-alphaview.action?key={}&startsWith=&startIndex=0'.format(main_url,space)
+    _url = 'https://{}/pages/listpages-alphaview.action?key={}&startsWith=&startIndex=0'.format(main_url, space)
     print("Authenticating into {}...".format(main_url))
     response = requests.request("GET", _url, headers=confluence_headers)
     if response.status_code != 200:
@@ -35,8 +35,8 @@ def authenticate():
     print("\tAccess granted. Hello {}!\n{}".format(response.headers['X-AUSERNAME'], breaker))
     return response
 
-
-def createUrls(_response):
+# -----> Grab page info
+def create_urls(_response):
     global lookup_url_count
     html_index = 0
     print("Getting lookup urls...")
@@ -45,7 +45,7 @@ def createUrls(_response):
             html_index = int(lookup_line.strip().replace('&amp;', '&').split('startIndex=')[-1].split('">')[0])
     for start_index in range(0, html_index + 1, 30):
         lookup_url_count += 1
-        url = 'https://{}/pages/listpages-alphaview.action?key={}&startsWith=&startIndex={}'.format(main_url,space, start_index)
+        url = 'https://{}/pages/listpages-alphaview.action?key={}&startsWith=&startIndex={}'.format(main_url, space, start_index)
         urls.append(url)
     validate_html = math.ceil(float(html_index + 1) / 30)
 
@@ -55,14 +55,11 @@ def createUrls(_response):
         print('{}'.format(breaker))
         return urls
 
-
-# -----> Grab page info
-
-def createPagesDict(_urls):
+def create_pages_dict(_urls):
     print("Extracting page names and links...")
     threads = []
     for _index in range(len(_urls)):
-        x = threading.Thread(target=extractPages, args=(_index,))
+        x = threading.Thread(target=extract_pages, args=(_index,))
         threads.append(x)
         x.start()
 
@@ -74,8 +71,7 @@ def createPagesDict(_urls):
         print('{}'.format(breaker))
         return pages_dict
 
-
-def extractPages(index):
+def extract_pages(index):
     global extract_pages_count
     responser = requests.request("GET", urls[index], headers=confluence_headers)
     if responser.status_code != 200:
@@ -93,22 +89,20 @@ def extractPages(index):
             pages.append(page_name)
             pages_dict[page_name] = page_link
 
-
 # -----> Grab link info
-
-def createLinksDict(_pages_dict):
+def create_links_dict(_pages_dict):
     print("Getting links...")
     for page_name, link in _pages_dict.items():
-        crawling_page = 'https://{}/display/{}/{}'.format(main_url,space, page_name)
+        crawling_page = 'https://{}/display/{}/{}'.format(main_url, space, page_name)
         page_id = _pages_dict[page_name].split('=')[-1]
-        _url = 'https://{}/rest/api/content?title={}&spacekey={}&expand=space,body.view,version,container'.format(main_url,page_name, space)
+        _url = 'https://{}/rest/api/content?title={}&spacekey={}&expand=space,body.view,version,container'.format(main_url, page_name, space)
         if page_id.isdigit():
-            _url = 'https://{}/rest/api/content/{}?expand=space,body.view,version,container'.format(main_url,page_id)
+            _url = 'https://{}/rest/api/content/{}?expand=space,body.view,version,container'.format(main_url, page_id)
         else:
-            _url = convertNameToPageId(_url)
+            _url = convert_name_to_page_id(_url)
         _response = requests.request("GET", _url, headers=confluence_headers)
         if _response.status_code != 200:
-            _url = 'https://{}/rest/api/content?title={}&spacekey={}&expand=space,body.view,version,container'.format(main_url,page_name, space)
+            _url = 'https://{}/rest/api/content?title={}&spacekey={}&expand=space,body.view,version,container'.format(main_url, page_name, space)
             _response = requests.request("GET", _url, headers=confluence_headers)
         r_json = _response.json()
         html_body = []
@@ -120,27 +114,24 @@ def createLinksDict(_pages_dict):
         print('\n~{}'.format(crawling_page))
         for chunk in html_body:
             for line in range(len(chunk)):
-                extractLinks(crawling_page, chunk, line)
+                extract_links(crawling_page, chunk, line)
 
     print('{}'.format(breaker))
     return links_dict
 
-
-def convertNameToPageId(_url):
+def convert_name_to_page_id(_url):
     _response = requests.request("GET", _url, headers=confluence_headers)
     try:
         r_json = _response.json()
         for index in range(len(r_json['results'])):
             if r_json['results'][index]['space']['key'] == space:
                 page_id = r_json['results'][index]['id']
-                return 'https://{}/rest/api/content/{}?expand=space,body.view,version,container'.format(main_url,page_id)
+                return 'https://{}/rest/api/content/{}?expand=space,body.view,version,container'.format(main_url, page_id)
         return _url
-
     except:
         return _url
 
-
-def extractLinks(crawling_page, chunk, line):
+def extract_links(crawling_page, chunk, line):
     _line = chunk[line]
     # WHITELISTS WEBSITES
     site = urllib.parse.unquote(html.unescape(_line)).split('href="')[-1].split('"')[0]
@@ -161,7 +152,7 @@ def extractLinks(crawling_page, chunk, line):
         except:
             link_text = ""
         if link_text == "":
-            link_text = html.unescape(extractSpanText(_line, chunk))
+            link_text = html.unescape(extract_span_text(_line, chunk))
         if '.' in site:
             if site.split('.')[-1] not in ['id', 'id/', 'name', 'name/']:
                 website = html.unescape(site).replace('%20', '+').replace(' ', '+')
@@ -176,8 +167,7 @@ def extractLinks(crawling_page, chunk, line):
             links_dict[crawling_page].append("{} :=: {}".format(link_text, website))
             print('--->{} = {}'.format(link_text, website))
 
-
-def extractSpanText(_line, chunk):
+def extract_span_text(_line, chunk):
     link_text = ""
     for index in range(len(chunk)):
         if _line == chunk[index]:
@@ -197,10 +187,54 @@ def extractSpanText(_line, chunk):
                     print('Could not format:\n\t\t'.format(chunk[index]))
                 return link_text
 
-
 # -----> Grab and test broken links
+# New Function: Test Link and Handle Results
+def test_link_and_handle_results(crawling_page, text, website, good_links, good_link_count, bad_link_count):
+    if website in good_links:
+        good_link_count += 1
+        print(f'{website} - STILL GOOD!')
+    elif website in bad_links:
+        bad_link_count += 1
+        add_to_broken_dict(crawling_page, text, website)
+        print(f'{website} - STILL BAD!')
+    else:
+        if test_link_authenticated(website):
+            good_link_count += 1
+            good_links.append(website)
+            print(f'{website} - GOOD!')
+        else:
+            bad_link_count += 1
+            add_to_broken_dict(crawling_page, text, website)
+            print(f'{website} - BAD!')
 
-def createBrokenDict(_links_dict):
+def test_link(crawling_page, text, website, good_links, good_link_count, bad_link_count):
+    if website.startswith(f'https://{main_url}/'):
+        test_link_and_handle_results(crawling_page, text, website, good_links, good_link_count, bad_link_count)
+    else:
+        try:
+            if website.startswith('http:'):
+                secure_website = website.replace('http:', 'https:')
+                secured_get_url = requests.get(secure_website, timeout=20)
+                if secured_get_url.status_code == 403:
+                    test_link_and_handle_results(crawling_page, text, website, good_links, good_link_count, bad_link_count)
+                elif secured_get_url.status_code == 200:
+                    good_link_count += 1
+                    good_links.append(website)
+                    print(f'{website} - GOOD!')
+                else:
+                    bad_link_count += 1
+                    add_to_broken_dict(crawling_page, text, website)
+                    print(f'{website} - BAD!')
+            else:
+                bad_link_count += 1
+                add_to_broken_dict(crawling_page, text, website)
+                print(f'{website} - BAD!')
+        except:
+            bad_link_count += 1
+            add_to_broken_dict(crawling_page, text, website)
+            print(f'{website} - BAD!')
+
+def create_broken_dict(_links_dict):
     link_count = 0
     bad_link_count = 0
     good_link_count = 0
@@ -210,114 +244,22 @@ def createBrokenDict(_links_dict):
         for pair in content_list:
             text = pair.split(' :=: ')[0]
             website = pair.split(' :=: ')[-1]
-            testLink(crawling_page, text, website, good_links, good_link_count, bad_link_count)
+            test_link(crawling_page, text, website, good_links, good_link_count, bad_link_count)
             link_count += 1
     print('{} links checked, {} bad links, {} good links, {} bypass auth'.format(link_count, bad_link_count, good_link_count, bypass_auth_list))
     print('{}'.format(breaker))
     return broken_dict
 
-
-def testLink(crawling_page, text, website, good_links, good_link_count, bad_link_count):
-    if website in good_links:
-        # WEBSITE ALREADY CHECKED GOOD
-        good_link_count += 1
-        print('{} - STILL GOOD!'.format(website))
-
-    elif website in bad_links:
-        # WEBSITE IS CHECKED BAD
-        bad_link_count += 1
-        addToBrokenDict(crawling_page, text, website)
-        print('{} - STILL BAD!'.format(website))
-
-    else:
-        try:
-            # CHECK LINK
-            if '://{}'.format(main_url) in website:
-                get_url = requests.request("GET", website, headers=confluence_headers)
-
-            else:
-                # Authenticate with confluence PAT
-                get_url = requests.get(website, timeout=20)
-
-            if get_url.status_code == 403:
-                # ASSUME AUTH LINK IS GOOD
-                bypass_auth_list.append(website)
-                good_link_count += 1
-                good_links.append(website)
-                print("Authentication needed to test availability for {}".format(website))
-
-            elif get_url.status_code == 200:
-                # GOOD LINK
-                good_link_count += 1
-                good_links.append(website)
-                print('{} - GOOD!'.format(website))
-
-            elif 'http:' in website:
-                # ATTEMPT LINK WITH SECURITY
-                secure_website = website.replace('http:', 'https:')
-                secured_get_url = requests.get(secure_website, timeout=20)
-                if secured_get_url.status_code == 403:
-                    # ASSUME AUTH LINK IS GOOD
-                    bypass_auth_list.append(website)
-                    good_link_count += 1
-                    good_links.append(website)
-                    print("Authentication needed to test availability for {}".format(website))
-
-                elif secured_get_url.status_code == 200:
-                    # GOOD LINK
-                    good_link_count += 1
-                    good_links.append(website)
-                    print('{} - GOOD!'.format(website))
-
-                else:
-                    # BAD SECURED LINK
-                    bad_link_count += 1
-                    addToBrokenDict(crawling_page, text, website)
-                    print('{} - BAD!'.format(website))
-            elif 'https://{}/'.format(main_url) in website:
-                # TRY ONCE MORE
-                get_url = requests.request("GET", website, headers=confluence_headers)
-
-                if get_url.status_code == 403:
-                    # ASSUME AUTH LINK IS GOOD
-                    bypass_auth_list.append(website)
-                    good_link_count += 1
-                    good_links.append(website)
-                    print("{} - auth bypass assume GOOD!".format(website))
-
-                elif get_url.status_code == 200:
-                    # GOOD LINK
-                    good_link_count += 1
-                    good_links.append(website)
-                    print('{} - GOOD!'.format(website))
-
-                else:
-                    bad_link_count += 1
-                    addToBrokenDict(crawling_page, text, website)
-                    print('{} - BAD!'.format(website))
-            else:
-                bad_link_count += 1
-                addToBrokenDict(crawling_page, text, website)
-                print('{} - BAD!'.format(website))
-        except:
-            # COULD NOT CHECK LINK
-            bad_link_count += 1
-            addToBrokenDict(crawling_page, text, website)
-            print('{} - BAD!'.format(website))
-
-
-def addToBrokenDict(_crawling_page, _text, _website):
+def add_to_broken_dict(_crawling_page, _text, _website):
     bad_links.append(_website)
     if _crawling_page not in broken_dict.keys():
         broken_dict[_crawling_page] = []
-    broken_dict[_crawling_page].append('The raw text "{}", has bad link to {}'.format(_text, _website))
-
+    broken_dict[_crawling_page].append('The raw text "{}", has a bad link to {}'.format(_text, _website))
 
 # -----> Send results
-
-def sendBadLinks(_broken_dict):
+def send_bad_links(_broken_dict):
     global o_lines
-    o_lines += 'The following is an Confluence web scraper script created by Brandon Volesky.\n\nBroken Wiki Links:\n'
+    o_lines += 'The following is a Confluence web scraper script created by Brandon Volesky.\n\nBroken Wiki Links:\n'
     print(breaker)
     for k, v in _broken_dict.items():
         if v:
@@ -327,10 +269,9 @@ def sendBadLinks(_broken_dict):
     with open('{}_Broken_Links.txt'.format(space), 'w') as output_file:
         output_file.write(o_lines)
 
-
 __response = authenticate()
-__urls = createUrls(__response)
-__pages_dict = createPagesDict(__urls)
-__links_dict = createLinksDict(__pages_dict)
-__broken_dict = createBrokenDict(__links_dict)
-sendBadLinks(__broken_dict)
+__urls = create_urls(__response)
+__pages_dict = create_pages_dict(__urls)
+__links_dict = create_links_dict(__pages_dict)
+__broken_dict = create_broken_dict(__links_dict)
+send_bad_links(__broken_dict)
