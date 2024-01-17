@@ -17,5 +17,8 @@ One of the major challenges I encountered was the presence of different "spaces"
 This project marked a significant milestone in my career, as it underscored the impact of my work not only on my immediate team but also on cross-functional teams. Moreover, it provided valuable monitoring capabilities for other businesses utilizing Confluence as their backend. The accuracy and completeness of documentation are paramount, especially in sectors like healthcare, where access to specific healthcare provider data is crucial. I take pride in the successful completion of this task, as it allows me to deliver value to critical verticals in need of accurate and dependable documentation.
 
 ### Usage:
-Run this script from your local machine that is running Python 3.8+
+1. Install Python from [Python Downloads](https://www.python.org/downloads/).
+2. Clone the Repository - ```git clone https://github.com/bvolesky/Confluence-Broken-Links.git```
+3. Navigate to the Repository - ```cd <repository_folder>/Confluence-Broken-Links```
+5. Run the App - ```python Confluence-Broken-Links.py```
 This will allow the proper link tests to go through that some corporate firewalls automatically blocks.
